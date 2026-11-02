@@ -1,7 +1,43 @@
 const express = require("express");
 const crypto = require("node:crypto");
 const { filterHeaders } = require("./utils/filterHeaders");
+const { WebSocketServer } = require('ws');
+
 const app = express();
+const wss = new WebSocketServer({ port: 8080 });
+
+// rn just supporting single agent no distribution cosplay
+let agentConnection = null;
+
+wss.on('connection', (ws) => {
+  if (agentConnection) {
+    ws.close(1008, "Agent is alrdy connected");
+    return;
+  }
+
+  agentConnection = ws;
+  console.log(`[pigeons] agent connected`);
+
+  ws.on("message", (data) => {
+    console.log("[agent]", data.toString());
+    ws.send(
+      JSON.stringify({
+        version: 1,
+        type: "agent_registered",
+        tunnel_id: "example_id",
+        tunnel_secret: "example_secret"
+      })
+    )
+  })
+
+  ws.on("close", () => {
+    if (agentConnection = ws) {
+      agentConnection = null;
+    }
+    console.log(`[pegions] agent left im alone now`)
+  })
+  ws.on("error", console.error);
+})
 
 // Capture raw bodies without assuming they're JSON or text.
 app.use(express.raw({
