@@ -1,0 +1,25 @@
+{
+  "name": "pigeons",
+  "version": "1.0.0",
+  "description": "http tunnels via ws",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "node --watch index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SaaranshDx/Pigeons.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/SaaranshDx/Pigeons/issues"
+  },
+  "homepage": "https://github.com/SaaranshDx/Pigeons#readme",
+  "dependencies": {
+    "express": "^5.3.0"
+  }
+}
