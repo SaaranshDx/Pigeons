@@ -1,6 +1,6 @@
 const express = require("express");
 const crypto = require("node:crypto");
-
+const { filterHeaders } = require("./utils/filterHeaders");
 const app = express();
 
 // Capture raw bodies without assuming they're JSON or text.
@@ -19,7 +19,7 @@ app.all("/{*path}", (req, res) => {
             method: req.method,
             url: req.originalUrl,
             httpVersion: req.httpVersion,
-            headers: req.headers,
+            headers: filterHeaders(req.headers),
             body: {
                 encoding: "base64",
                 data: req.body?.toString("base64") ?? ""
