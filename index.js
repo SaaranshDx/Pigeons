@@ -1,12 +1,14 @@
 
 const express = require("express");
+const http = require("node:http");
 const crypto = require("node:crypto");
 const { filterHeaders } = require("./utils/filterHeaders");
 const { WebSocketServer, WebSocket } = require("ws");
 require("dotenv").config();
 
 const app = express();
-const wss = new WebSocketServer({ port: 8080 });
+const server = http.createServer(app);
+const wss = new WebSocketServer({ server });
 
 const tunnels = new Map();
 const pendingRequests = new Map();
@@ -240,8 +242,8 @@ app.all("/{*path}", (req, res) => {
     }
 });
 
-const port = process.env.PORT || 8000
+const port = process.env.PORT || 8000;
 
-app.listen(port, () => {
+server.listen(port, () => {
     console.log(`[pigeon] edge listening on port ${port}`);
 });

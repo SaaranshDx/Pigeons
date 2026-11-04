@@ -21,20 +21,22 @@ const HOP_BY_HOP = new Set([
 ]);
 
 // CLI arguments
-function getPort() {
+function getOptions() {
     const args = process.argv.slice(2);
 
     const index = args.indexOf("-p");
+    const dev = args.includes("-d") || args.includes("-dev");
 
     if (args.includes("-h") || args.includes("--help")) {
         console.log(`
 Pigeon Tunnel Agent v${VERSION}
 
 Usage:
-  node agent.js -p <port>
+  node agent.js -p <port> [-d|-dev]
 
 Options:
   -p <port>    Local service port
+  -d, -dev     Connect to the local WebSocket server
   -h           Show this help
 `);
         process.exit(0);
@@ -53,10 +55,10 @@ Options:
         process.exit(1);
     }
 
-    return port;
+    return { port, dev };
 }
 
-const PORT = getPort();
+const { port: PORT, dev: DEV_MODE } = getOptions();
 const TARGET = `http://127.0.0.1:${PORT}`;
 
 let ws;
@@ -70,6 +72,10 @@ function log(type, message) {
 }
 
 async function discoverEdge() {
+    if (DEV_MODE) {
+        return "ws://localhost:8000";
+    }
+
     log("CP", "Discovering control plane...");
 
     const response = await fetch(CP_URL, {
