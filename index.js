@@ -3,6 +3,7 @@ const express = require("express");
 const crypto = require("node:crypto");
 const { filterHeaders } = require("./utils/filterHeaders");
 const { WebSocketServer, WebSocket } = require("ws");
+require("dotenv").config();
 
 const app = express();
 const wss = new WebSocketServer({ port: 8080 });
