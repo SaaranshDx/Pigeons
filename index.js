@@ -72,7 +72,7 @@ wss.on("connection", (ws) => {
         // Register the agent exactly once.
         if (payload.type === "agent_register") {
             if (!tunnelId) {
-                tunnelId = `tunnel_${crypto.randomUUID()}`;
+                tunnelId = `pigeon_tunnel_${crypto.randomUUID()}`;
 
                 tunnels.set(tunnelId, {
                     connection: ws,
