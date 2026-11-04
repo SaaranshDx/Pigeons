@@ -4,7 +4,10 @@ version = 1
 [http]
 method = "GET"
 url = "http://localhost:8000/cats.js"
-headers = [{ name = "Cats", value = "meow" }]
+headers = [
+  { name = "Cats", value = "meow" },
+  { name = "Host", value = "tunnel_df3ba4d6-5d70-4daa-aee2-8714613646ea.cats.com" }
+]
 body = {
   type = "json",
   data = """

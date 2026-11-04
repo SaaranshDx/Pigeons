@@ -7,8 +7,6 @@ const { WebSocketServer, WebSocket } = require("ws");
 const app = express();
 const wss = new WebSocketServer({ port: 8080 });
 
-let agentConnection = null;
-
 const tunnels = new Map();
 const pendingRequests = new Map();
 
@@ -56,13 +54,6 @@ function sendHttpResponse(res, responsePayload) {
 
 // WebSocket connections.
 wss.on("connection", (ws) => {
-    if (agentConnection) {
-        ws.close(1008, "Agent is already connected");
-        return;
-    }
-
-    agentConnection = ws;
-
     // Each socket gets its own tunnel ID.
     let tunnelId = null;
 
@@ -136,10 +127,6 @@ wss.on("connection", (ws) => {
     });
 
     ws.on("close", () => {
-        if (agentConnection === ws) {
-            agentConnection = null;
-        }
-
         // Remove only this socket's tunnel.
         const tunnel = tunnels.get(tunnelId);
 
