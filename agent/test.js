@@ -71,11 +71,56 @@ ws.on("message", async (data) => {
 
     try {
         const response = await forwardRequest(payload, targetServer);
+        const responseBody = Buffer.from(await response.arrayBuffer());
+        const responseHeaders = Object.fromEntries(response.headers.entries());
+        if (typeof response.headers.getSetCookie === "function") {
+            const setCookies = response.headers.getSetCookie();
+            if (setCookies.length > 0) {
+                responseHeaders["set-cookie"] = setCookies;
+            }
+        }
+
         console.log(
             `[AGENT] Forwarded ${payload.request.method} ${payload.request.url}: ${response.status}`
         );
+
+        ws.send(JSON.stringify({
+            version: 1,
+            type: "http_response",
+            id: payload.id,
+            response: {
+                status: response.status,
+                statusText: response.statusText,
+                headers: responseHeaders,
+                body: {
+                    encoding: "base64",
+                    data: responseBody.toString("base64")
+                }
+            }
+        }));
     } catch (error) {
         console.error("[AGENT] Failed to forward request", error);
+
+        const errorBody = Buffer.from(JSON.stringify({
+            error: "agent failed to reach target server"
+        }));
+
+        ws.send(JSON.stringify({
+            version: 1,
+            type: "http_response",
+            id: payload.id,
+            response: {
+                status: 502,
+                statusText: "Bad Gateway",
+                headers: {
+                    "content-type": "application/json"
+                },
+                body: {
+                    encoding: "base64",
+                    data: errorBody.toString("base64")
+                }
+            }
+        }));
     }
 });
 
