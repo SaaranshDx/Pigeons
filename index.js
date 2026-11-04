@@ -168,6 +168,12 @@ app.get("/getcpserver", (req, res) => {
   })
 });
 
+app.get("/tunnels", (req, res) => {
+  const tunnelMap = JSON.stringify(Object.fromEntries(tunnels), null, 2);
+  res.set('Content-Type', 'application/json');
+  res.send(tunnelMap);
+});
+
 // Incoming public HTTP requests.
 app.all("/{*path}", (req, res) => {
     const hostname = req.hostname;
