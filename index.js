@@ -162,6 +162,12 @@ app.use(express.raw({
     limit: "10mb"
 }));
 
+app.get("/getcpserver", (req, res) => {
+  res.json({
+    "ws_server": process.env.WSPRODURI || `ws://cats`
+  })
+});
+
 // Incoming public HTTP requests.
 app.all("/{*path}", (req, res) => {
     const hostname = req.hostname;
