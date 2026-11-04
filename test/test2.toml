@@ -1,0 +1,16 @@
+[meta]
+version = 1
+
+[http]
+method = "GET"
+url = "http://localhost:3000/index.js"
+headers = [{ name = "Cats", value = "meow" }]
+body = {
+  type = "json",
+  data = """
+{
+   "cats":[
+      "meow":"meow"
+   ]
+}"""
+}
