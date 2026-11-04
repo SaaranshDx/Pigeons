@@ -3,8 +3,8 @@ version = 1
 
 [http]
 method = "GET"
-url = "http://localhost:8000"
-headers = [{ name = "Cats", value = "1" }]
+url = "http://localhost:8000/cats.js"
+headers = [{ name = "Cats", value = "meow" }]
 body = {
   type = "json",
   data = """

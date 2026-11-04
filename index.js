@@ -63,9 +63,21 @@ app.all("/{*path}", (req, res) => {
         }
     };
 
-    console.log(payload);
+    console.log(`[pegions] sending pegions carrying the data to the agents`);
 
-    res.json({ received: true, id: payload.id });
+    if (!agentConnection || agentConnection.readyState !== WebSocket.OPEN) {
+        return res.status(502).json({
+            error: "no one is here to feed ur data"
+        });
+    }
+
+    agentConnection.send(JSON.stringify(payload));
+
+    res.json({
+        sent: true,
+        id: payload.id
+    });
+
 });
 
 app.listen(8000);
