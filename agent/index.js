@@ -4,6 +4,7 @@ const WebSocket = require("ws");
 const https = require("https");
 
 const CP_URL = "https://pigeon-proxy.saaranshdx.workers.dev/getcpserver";
+const PROD_WS_URL = process.env.PIGEON_WS_URL || "ws://185.207.8.46:25351";
 const DOMAIN = "mizucode.qzz.io";
 const VERSION = "0.1.0";
 
@@ -78,27 +79,37 @@ async function discoverEdge() {
 
     log("CP", "Discovering control plane...");
 
-    const response = await fetch(CP_URL, {
-        headers: {
-            accept: "application/json"
-        },
-        signal: AbortSignal.timeout(10000)
-    });
+    try {
+        const response = await fetch(CP_URL, {
+            headers: {
+                accept: "application/json"
+            },
+            signal: AbortSignal.timeout(10000)
+        });
 
-    if (!response.ok) {
-        throw new Error(`Control plane returned HTTP ${response.status}`);
+        if (!response.ok) {
+            throw new Error(`Control plane returned HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        if (
+            typeof data.ws_server !== "string" ||
+            !["ws:", "wss:"].includes(new URL(data.ws_server).protocol)
+        ) {
+            throw new Error("Invalid ws_server received from control plane");
+        }
+
+        return data.ws_server;
+    } catch (error) {
+        const cause = error.cause?.code || error.cause?.message;
+        const details = cause ? `${error.message} (${cause})` : error.message;
+
+        log("CP", `Discovery failed: ${details}`);
+        log("CP", `Using production fallback: ${PROD_WS_URL}`);
+
+        return PROD_WS_URL;
     }
-
-    const data = await response.json();
-
-    if (
-        typeof data.ws_server !== "string" ||
-        !["ws:", "wss:"].includes(new URL(data.ws_server).protocol)
-    ) {
-        throw new Error("Invalid ws_server received from control plane");
-    }
-
-    return data.ws_server;
 }
 
 function filterHeaders(source) {
