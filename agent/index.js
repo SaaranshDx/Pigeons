@@ -1,12 +1,22 @@
 
 const WebSocket = require("ws");
 
-const https = require("https");
+const VERSION = "0.1.0";
 
 const CP_URL = "https://pigeon-proxy.saaranshdx.workers.dev/getcpserver";
 const PROD_WS_URL = process.env.PIGEON_WS_URL || "ws://185.207.8.46:25351";
 const DOMAIN = "mizucode.qzz.io";
-const VERSION = "0.1.0";
+
+const COLORS = {
+    reset: "\x1b[0m",
+    blue: "\x1b[94m",
+    cyan: "\x1b[96m",
+    green: "\x1b[92m",
+    yellow: "\x1b[93m",
+    red: "\x1b[91m",
+    magenta: "\x1b[95m",
+    gray: "\x1b[90m",
+};
 
 const HOP_BY_HOP = new Set([
     "connection",
@@ -21,7 +31,6 @@ const HOP_BY_HOP = new Set([
     "host"
 ]);
 
-// CLI arguments
 function getOptions() {
     const args = process.argv.slice(2);
 
@@ -30,10 +39,10 @@ function getOptions() {
 
     if (args.includes("-h") || args.includes("--help")) {
         console.log(`
-Pigeon Tunnel Agent v${VERSION}
+Pigeon Agent
 
 Usage:
-  node agent.js -p <port> [-d|-dev]
+  pigeon -p <port> [-d|-dev]
 
 Options:
   -p <port>    Local service port
@@ -44,15 +53,14 @@ Options:
     }
 
     if (index === -1 || !args[index + 1]) {
-        console.error("[ERROR] Missing required -p argument.");
-        console.error("Usage: node agent.js -p 5000");
+        console.error("Missing required -p argument.");
         process.exit(1);
     }
 
     const port = Number(args[index + 1]);
 
     if (!Number.isInteger(port) || port < 1 || port > 65535) {
-        console.error("[ERROR] Invalid port.");
+        console.error("Invalid port.");
         process.exit(1);
     }
 
@@ -68,16 +76,33 @@ let reconnectAttempts = 0;
 let reconnectTimer = null;
 let shuttingDown = false;
 
-function log(type, message) {
-    console.log(`[${new Date().toLocaleTimeString()}] [${type}] ${message}`);
+function log(message, type = "info") {
+    const colors = {
+        info: COLORS.blue,
+        success: COLORS.green,
+        warn: COLORS.yellow,
+        error: COLORS.red,
+        debug: COLORS.magenta,
+        request: COLORS.cyan,
+        response: COLORS.green,
+        agent: COLORS.gray,
+    };
+
+    const color = colors[type] || COLORS.reset;
+    const time = new Date().toLocaleTimeString();
+
+    console.log(
+        `${COLORS.gray}[${time}]${COLORS.reset} ${color}${message}${COLORS.reset}`
+    );
 }
 
 async function discoverEdge() {
     if (DEV_MODE) {
+        log("Using local development server", "info");
         return "ws://localhost:8000";
     }
 
-    log("CP", "Discovering control plane...");
+    log("Discovering control plane...", "info");
 
     try {
         const response = await fetch(CP_URL, {
@@ -100,13 +125,15 @@ async function discoverEdge() {
             throw new Error("Invalid ws_server received from control plane");
         }
 
+        log(`Discovered edge: ${data.ws_server}`, "success");
+
         return data.ws_server;
     } catch (error) {
         const cause = error.cause?.code || error.cause?.message;
         const details = cause ? `${error.message} (${cause})` : error.message;
 
-        log("CP", `Discovery failed: ${details}`);
-        log("CP", `Using production fallback: ${PROD_WS_URL}`);
+        log(`Discovery failed: ${details}`, "warn");
+        log(`Using production fallback: ${PROD_WS_URL}`, "warn");
 
         return PROD_WS_URL;
     }
@@ -214,20 +241,26 @@ async function handleRequest(socket, payload) {
     const url = payload.request?.url || "?";
 
     if (!id) {
-        log("WARN", "Request received without an ID");
+        log("Request received without an ID", "warn");
         return;
     }
 
-    log("REQ", `${method} ${url}`);
+    log(`${method} ${url}`, "request");
 
     let response;
 
     try {
         response = await forwardRequest(payload);
 
-        log("RES", `${method} ${url} → ${response.status}`);
+        const type = response.status >= 500
+            ? "error"
+            : response.status >= 400
+                ? "warn"
+                : "response";
+
+        log(`${method} ${url} → ${response.status}`, type);
     } catch (error) {
-        log("ERROR", `${method} ${url} → ${error.message}`);
+        log(`${method} ${url} → ${error.message}`, "error");
 
         const errorBody = Buffer.from(JSON.stringify({
             error: "agent_upstream_error",
@@ -250,7 +283,7 @@ async function handleRequest(socket, payload) {
     }
 
     if (socket !== ws || socket.readyState !== WebSocket.OPEN) {
-        log("WARN", `Cannot send response for ${id}: connection lost`);
+        log(`Cannot send response for ${id}: connection lost`, "warn");
         return;
     }
 
@@ -268,7 +301,7 @@ async function connect() {
     try {
         const edgeUrl = await discoverEdge();
 
-        log("EDGE", `Connecting to ${edgeUrl}`);
+        log(`Connecting to ${edgeUrl}`, "info");
 
         const socket = new WebSocket(edgeUrl);
         ws = socket;
@@ -276,7 +309,7 @@ async function connect() {
         socket.on("open", () => {
             reconnectAttempts = 0;
 
-            log("EDGE", "Connected successfully");
+            log("Connected successfully", "success");
 
             socket.send(JSON.stringify({
                 version: 1,
@@ -292,7 +325,7 @@ async function connect() {
             try {
                 payload = JSON.parse(data.toString());
             } catch {
-                log("WARN", "Received invalid JSON from edge");
+                log("Received invalid JSON from edge", "error");
                 return;
             }
 
@@ -301,34 +334,33 @@ async function connect() {
                     tunnelId = payload.tunnel_id;
 
                     if (!tunnelId) {
-                        log("ERROR", "Registration response missing tunnel_id");
+                        log("Registration response missing tunnel_id", "error");
                         socket.close();
                         return;
                     }
 
-                    log("TUNNEL", "Registration successful");
-                    log("TUNNEL", `ID: ${tunnelId}`);
-                    log("TUNNEL", `URL: https://${tunnelId}.${DOMAIN}`);
+                    log("Registration successful", "success");
+                    log(`ID: ${tunnelId}`, "success");
+                    log(`URL: https://${tunnelId}.${DOMAIN}`, "success");
 
                     break;
                 }
 
                 case "http_request":
-                    // Independent handling allows concurrent requests.
                     void handleRequest(socket, payload);
                     break;
 
                 case "error":
-                    log("EDGE", `Server error: ${JSON.stringify(payload)}`);
+                    log(`Server error: ${JSON.stringify(payload)}`, "error");
                     break;
 
                 default:
-                    log("EDGE", `Unknown message type: ${payload.type}`);
+                    log(`Unknown message type: ${payload.type}`, "debug");
             }
         });
 
         socket.on("close", (code, reason) => {
-            log("EDGE", `Disconnected (${code}: ${reason.toString()})`);
+            log(`Disconnected (${code}: ${reason.toString()})`, "warn");
 
             if (ws === socket) {
                 ws = null;
@@ -339,11 +371,11 @@ async function connect() {
         });
 
         socket.on("error", error => {
-            log("ERROR", `WebSocket: ${error.message}`);
+            log(`WebSocket: ${error.message}`, "error");
         });
 
     } catch (error) {
-        log("ERROR", `Connection failed: ${error.message}`);
+        log(`Connection failed: ${error.message}`, "error");
         scheduleReconnect();
     }
 }
@@ -358,7 +390,7 @@ function scheduleReconnect() {
 
     reconnectAttempts++;
 
-    log("RECONNECT", `Retrying in ${Math.round(delay / 1000)}s`);
+    log(`Retrying in ${Math.round(delay / 1000)}s`, "warn");
 
     reconnectTimer = setTimeout(() => {
         reconnectTimer = null;
@@ -371,7 +403,7 @@ function shutdown() {
 
     shuttingDown = true;
 
-    log("AGENT", "Shutting down...");
+    log("Shutting down...", "agent");
 
     if (reconnectTimer) {
         clearTimeout(reconnectTimer);
@@ -391,15 +423,14 @@ process.on("SIGTERM", shutdown);
 console.log(`
   .__
 ______ |__| ____   ____  ____   ____
-\____ \|  |/ ___\_/ __ \/  _ \ /    \
-|  |_> >  / /_/  >  ___(  <_> )   |  \
-|   __/|__\___  / \___  >____/|___|  /
-|__|     /_____/      \/           \/
+\\____ \\|  |/ ___\\_/ __ \\/  _ \\ /    \\
+|  |_> >  / /_/  >  ___(  <_> )   |  \\
+|   __/|__\\___  / \\___  >____/|___|  /
+|__|     /_____/      \\/           \\/
 
-Pigeon Agent v${VERSION}
 `);
 
-log("AGENT", `Local target: ${TARGET}`);
-log("AGENT", "Starting tunnel...");
+log(`Local target: ${TARGET}`, "info");
+log("Starting tunnel...", "info");
 
 connect();
