@@ -15,7 +15,6 @@ const pendingRequests = new Map();
 
 const REQUEST_TIMEOUT_MS = 30_000;
 
-// Reconstruct the HTTP response received from the agent.
 function sendHttpResponse(res, responsePayload) {
     const response = responsePayload?.response;
     const status = Number(response?.status);
@@ -55,9 +54,7 @@ function sendHttpResponse(res, responsePayload) {
     res.status(status).end(body);
 }
 
-// WebSocket connections.
 wss.on("connection", (ws) => {
-    // Each socket gets its own tunnel ID.
     let tunnelId = null;
 
     console.log("[pigeon] agent connected");
@@ -72,10 +69,9 @@ wss.on("connection", (ws) => {
             return;
         }
 
-        // Register the agent exactly once.
         if (payload.type === "agent_register") {
             if (!tunnelId) {
-                tunnelId = `pigeon_tunnel_${crypto.randomUUID()}`;
+                tunnelId = `pigeon-tunnel-${crypto.randomUUID()}`;
 
                 tunnels.set(tunnelId, {
                     connection: ws,
@@ -107,7 +103,6 @@ wss.on("connection", (ws) => {
             return;
         }
 
-        // Make sure this agent owns the request.
         if (pending.tunnelId !== tunnelId) {
             console.error("[pigeon] response came from wrong tunnel");
             return;
@@ -130,14 +125,12 @@ wss.on("connection", (ws) => {
     });
 
     ws.on("close", () => {
-        // Remove only this socket's tunnel.
         const tunnel = tunnels.get(tunnelId);
 
         if (tunnel?.connection === ws) {
             tunnels.delete(tunnelId);
         }
 
-        // Fail requests belonging to this tunnel only.
         for (const [id, pending] of pendingRequests) {
             if (pending.tunnelId !== tunnelId) continue;
 
@@ -159,7 +152,6 @@ wss.on("connection", (ws) => {
     });
 });
 
-// Capture raw request bodies.
 app.use(express.raw({
     type: () => true,
     limit: "10mb"
@@ -177,9 +169,8 @@ app.get("/tunnels", (req, res) => {
   res.send(tunnelMap);
 });
 
-// Incoming public HTTP requests.
 app.all("/{*path}", (req, res) => {
-    const hostname = req.hostname;
+    const hostname = req.get("x-pigeon-original-host") || req.hostname;
     const tunnelId = hostname.split(".")[0];
 
     const tunnel = tunnels.get(tunnelId);
