@@ -1,0 +1,9 @@
+
+{
+  "main": "dist/pigeon-agent.cjs",
+  "mainFormat": "commonjs",
+  "output": "dist/pigeon-agent-linux-x64",
+  "disableExperimentalSEAWarning": true,
+  "useSnapshot": false,
+  "useCodeCache": false
+}

@@ -1,0 +1,67 @@
+name: Build agent binaries
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "agent/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/build-agent.yml"
+  pull_request:
+    paths:
+      - "agent/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/build-agent.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x64
+            os: windows-latest
+            config: sea-config.json
+            binary: agent/dist/pigeon-agent.exe
+            artifact: pigeon-agent-windows-x64
+          - name: Linux x64
+            os: ubuntu-latest
+            config: sea-config-linux.json
+            binary: agent/dist/pigeon-agent-linux-x64
+            artifact: pigeon-agent-linux-x64
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Bundle agent
+        run: npx --no-install esbuild agent/index.js --bundle --platform=node --format=cjs --outfile=agent/dist/pigeon-agent.cjs
+
+      - name: Build SEA executable
+        run: node agent/build-sea.js agent/${{ matrix.config }}
+
+      - name: Upload executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.binary }}
+          if-no-files-found: error
+          retention-days: 30

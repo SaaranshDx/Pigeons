@@ -1,0 +1,6 @@
+{
+  "main": "dist/pigeon-agent.cjs",
+  "mainFormat": "commonjs",
+  "output": "dist/pigeon-agent.exe",
+  "disableExperimentalSEAWarning": true
+}
