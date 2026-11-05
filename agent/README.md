@@ -157,6 +157,25 @@ console.log(tunnel.tunnelId);
 
 These properties become `null` or `false` when disconnected.
 
+## Troubleshooting
+
+### Common HTTP errors
+
+| Error | Meaning | What to check |
+|---|---|---|
+| `404 Not Found` | The requested tunnel may not exist, may have disconnected, or the tunnel ID may be invalid. | Make sure the tunnel is connected and that you're using the correct public URL. |
+| `502 Bad Gateway` | Peigon could not successfully forward the request to your local service. The service may be unreachable, stopped, or returning an upstream connection error. | Make sure your local service is running and that the configured `target` URL is correct. |
+| `523 Origin Unreachable` | Cloudflare cannot reach Peigon's gateway/origin server. This is generally a gateway-side connectivity issue, not a direct indication that your local service is down. | Check gateway availability and its network connectivity. |
+
+**Important notes:**
+- A `404` returned by your own local application may simply mean that the requested route does not exist. It does not necessarily indicate a disconnected tunnel.
+- A `404` response containing `Tunnel not found` indicates that Peigon could not find the requested tunnel.
+- A `502` generally indicates a problem between Peigon and the configured local target.
+- A `523` generally indicates that Cloudflare cannot establish a connection to the gateway.
+- If the tunnel disconnects, its public URL may stop working until the connection is restored.
+
+
+
 ### Disconnect
 
 ```js
