@@ -1,0 +1,287 @@
+# Pigeon Agent
+
+Expose a locally hosted HTTP service to the internet through Pigeon's tunneling infrastructure.
+
+Pigeon Agent is a lightweight Node.js client that connects your local HTTP server to a remote WebSocket edge and forwards incoming HTTP requests to your local service.
+
+## Requirements
+
+- Node.js 18 or newer
+- A running HTTP service
+- `ws` dependency
+
+## Installation
+
+Download `index.js` from the [Pigeon repository](https://github.com/) and place it in your project.
+
+Install the required dependency:
+
+```bash
+npm install ws
+```
+
+Your project should look like this:
+
+```text
+my-project/
+├── pigeon.js
+├── index.js
+└── package.json
+```
+
+## Quick start
+
+Start your local HTTP server first. For this example, we'll assume it runs on port `3030`.
+
+Create `index.js`:
+
+```js
+const Pigeon = require("./pigeon");
+
+async function main() {
+    const tunnel = await Pigeon({
+        target: "http://localhost:3030"
+    });
+
+    try {
+        const connection = await tunnel.connect();
+
+        console.log("Tunnel established!");
+        console.log("Public URL:", connection.url);
+        console.log("Tunnel ID:", connection.tunnelId);
+    } catch (error) {
+        console.error("Failed to establish tunnel:", error);
+    }
+}
+
+main();
+```
+
+Once registered, your local service becomes accessible through the generated public URL.
+
+## Configuration
+
+Pigeon accepts an options object.
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `target` | String | `null` | Local HTTP service URL |
+| `port` | Number | `null` | Local port, used when `target` is omitted |
+| `domain` | String | `mizucode.qzz.io` | Public tunnel domain |
+| `wsURL` | String | `null` | Explicit WebSocket edge URL |
+| `edgeURL` | String | `null` | Alternative explicit WebSocket edge URL |
+| `controlPlaneURL` | String | Built-in URL | Control-plane discovery endpoint |
+| `fallbackURL` | String | Built-in URL | Fallback WebSocket endpoint |
+| `devMode` | Boolean | `false` | Connect to local development edge |
+| `dev` | Boolean | `false` | Alias for `devMode` |
+| `requestTimeout` | Number | `30000` | Local HTTP request timeout in milliseconds |
+| `discoveryTimeout` | Number | `10000` | Control-plane discovery timeout |
+| `silent` | Boolean | `false` | Disable logging |
+| `logger` | Function/Object | `console` | Custom logging implementation |
+
+### Using a port
+
+Instead of specifying a complete target URL:
+
+```js
+const tunnel = await Pigeon({
+    port: 3030
+});
+```
+
+This automatically targets:
+
+```text
+http://127.0.0.1:3030
+```
+
+### Custom WebSocket edge
+
+You can bypass control-plane discovery by specifying an edge URL:
+
+```js
+const tunnel = await Pigeon({
+    target: "http://localhost:3030",
+    wsURL: "wss://your-edge.example.com"
+});
+```
+
+### Development mode
+
+For local development:
+
+```js
+const tunnel = await Pigeon({
+    target: "http://localhost:3030",
+    devMode: true
+});
+```
+
+This connects to `ws://localhost:8000`.
+
+## Connection management
+
+### Connect
+
+```js
+const connection = await tunnel.connect();
+
+console.log(connection.url);
+console.log(connection.tunnelId);
+```
+
+`connect()` resolves with:
+
+```js
+{
+    url: "https://<tunnel-id>.mizucode.qzz.io",
+    tunnelId: "<tunnel-id>"
+}
+```
+
+### Connection state
+
+Pigeon exposes read-only getters:
+
+```js
+console.log(tunnel.connected);
+console.log(tunnel.url);
+console.log(tunnel.tunnelId);
+```
+
+| Property | Description |
+|---|---|
+| `connected` | Whether the tunnel is registered and connected |
+| `url` | Generated public URL |
+| `tunnelId` | Assigned tunnel identifier |
+
+These properties become `null` or `false` when disconnected.
+
+### Disconnect
+
+```js
+await tunnel.disconnect();
+```
+
+Disconnecting:
+- Closes the active WebSocket connection.
+- Cancels pending reconnection timers.
+- Resets connection state.
+- Disables automatic reconnection.
+
+## Automatic reconnection
+
+Pigeon automatically attempts to reconnect when its WebSocket connection closes unexpectedly.
+
+It uses exponential backoff:
+
+- Starts at 1 second.
+- Doubles after each unsuccessful attempt.
+- Caps at 30 seconds.
+
+Calling `disconnect()` disables automatic reconnection.
+
+## Logging
+
+Pigeon supports custom logging.
+
+### Disable logging
+
+```js
+const tunnel = await Pigeon({
+    target: "http://localhost:3030",
+    silent: true
+});
+```
+
+### Custom logger
+
+```js
+const tunnel = await Pigeon({
+    target: "http://localhost:3030",
+
+    logger(message, type) {
+        console.log(`[${type}] ${message}`);
+    }
+});
+```
+
+You can also supply an object:
+
+```js
+const tunnel = await Pigeon({
+    target: "http://localhost:3030",
+
+    logger: {
+        info: console.log,
+        success: console.log,
+        warn: console.warn,
+        error: console.error
+    }
+});
+```
+
+## Request forwarding
+
+Pigeon forwards incoming HTTP requests to your configured local target.
+
+The agent handles:
+
+- HTTP methods.
+- Request headers.
+- Request bodies.
+- Response status codes.
+- Response headers.
+- Response bodies.
+- Multiple concurrent requests.
+
+Hop-by-hop headers are filtered during forwarding.
+
+Request and response bodies are transported through the WebSocket protocol using Base64 encoding.
+
+If the local service cannot be reached or a request times out, the agent returns a `502 Bad Gateway` response.
+
+## Complete example
+
+```js
+const Pigeon = require("./pigeon");
+
+async function start() {
+    const tunnel = await Pigeon({
+        target: "http://localhost:3030"
+    });
+
+    try {
+        const { url, tunnelId } = await tunnel.connect();
+
+        console.log("Pigeon is online!");
+        console.log("URL:", url);
+        console.log("ID:", tunnelId);
+
+    } catch (error) {
+        console.error("Connection failed:", error);
+        return;
+    }
+
+    process.on("SIGINT", async () => {
+        console.log("Disconnecting Pigeon...");
+
+        await tunnel.disconnect();
+
+        process.exit(0);
+    });
+}
+
+start();
+```
+
+## Security considerations
+
+A tunnel makes your local HTTP service reachable through a public endpoint.
+
+- Do not expose development services containing sensitive information.
+- Implement authentication and authorization in your application where needed.
+- Avoid forwarding administrative endpoints without appropriate protection.
+- Keep your agent and its dependencies updated.
+
+Pigeon provides connectivity, not application-level access control.
