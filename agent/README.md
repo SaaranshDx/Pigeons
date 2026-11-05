@@ -12,7 +12,7 @@ Pigeon Agent is a lightweight Node.js client that connects your local HTTP serve
 
 ## Installation
 
-Download `index.js` from the [Pigeon repository](https://github.com/) and place it in your project.
+Download `index.js` from the [Pigeon repository](https://github.com/SaaranshDx/Pigeons/blob/main/agent/index.js) and place it in your project.
 
 Install the required dependency:
 
