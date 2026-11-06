@@ -112,6 +112,10 @@ the `tunnel.token` getter.
 A valid token resumes its exact tunnel ID. Invalid or unknown tokens are
 reported by the server as authentication errors.
 
+The server persists token-to-tunnel mappings in `tokens/tokens.json` in the
+backend directory. The file is loaded when the server starts, so mappings
+survive server restarts.
+
 ### Using a port
 
 Instead of specifying a complete target URL:

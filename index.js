@@ -1,6 +1,8 @@
 
 const express = require("express");
+const fs = require("node:fs");
 const http = require("node:http");
+const path = require("node:path");
 const crypto = require("node:crypto");
 const { filterHeaders } = require("./utils/filterHeaders");
 const { createToken, isValidToken } = require("./utils/tokens");
@@ -16,6 +18,74 @@ const tokens = new Map();
 const pendingRequests = new Map();
 
 const REQUEST_TIMEOUT_MS = 30_000;
+const TOKEN_DIR = path.join(__dirname, "tokens");
+const TOKEN_FILE = path.join(TOKEN_DIR, "tokens.json");
+
+function loadTokenMappings() {
+    let contents;
+
+    try {
+        contents = fs.readFileSync(TOKEN_FILE, "utf8");
+    } catch (error) {
+        if (error.code !== "ENOENT") {
+            console.error(
+                `[pigeon] could not read token file ${TOKEN_FILE}: ${error.message}`
+            );
+        }
+        return;
+    }
+
+    let storedTokens;
+
+    try {
+        storedTokens = JSON.parse(contents);
+    } catch (error) {
+        console.error(
+            `[pigeon] could not parse token file ${TOKEN_FILE}: ${error.message}`
+        );
+        return;
+    }
+
+    if (!storedTokens || typeof storedTokens !== "object" || Array.isArray(storedTokens)) {
+        console.error(`[pigeon] token file ${TOKEN_FILE} must contain an object`);
+        return;
+    }
+
+    let loaded = 0;
+
+    for (const [token, tunnelId] of Object.entries(storedTokens)) {
+        if (!isValidToken(token) || typeof tunnelId !== "string" || !tunnelId) {
+            continue;
+        }
+
+        tokens.set(token, tunnelId);
+        loaded++;
+    }
+
+    if (loaded > 0) {
+        console.log(`[pigeon] loaded ${loaded} token mapping(s) from ${TOKEN_FILE}`);
+    }
+}
+
+function saveTokenMappings() {
+    try {
+        fs.mkdirSync(TOKEN_DIR, { recursive: true });
+        fs.writeFileSync(
+            TOKEN_FILE,
+            `${JSON.stringify(Object.fromEntries(tokens), null, 2)}\n`,
+            {
+                encoding: "utf8",
+                mode: 0o600
+            }
+        );
+    } catch (error) {
+        console.error(
+            `[pigeon] could not save token file ${TOKEN_FILE}: ${error.message}`
+        );
+    }
+}
+
+loadTokenMappings();
 
 function sendHttpResponse(res, responsePayload) {
     const response = responsePayload?.response;
@@ -205,6 +275,7 @@ wss.on("connection", (ws) => {
                 token
             });
             tokens.set(token, tunnelId);
+            saveTokenMappings();
 
             console.log(
                 `[pigeon] authenticated tunnel ${tunnelId} with token ${token}`
