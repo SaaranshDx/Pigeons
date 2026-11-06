@@ -1,5 +1,11 @@
 # Pigeon Agent
 
+> [!WARNING]
+> Security warning
+>
+> - Keep `ptk_` tokens and `.pegion` and add them to the gitignore
+> - Pigeon handles transport, not application authorization.
+
 Expose a locally hosted HTTP service to the internet through Pigeon's tunneling infrastructure.
 
 Pigeon Agent is a lightweight Node.js client that connects your local HTTP server to a remote WebSocket edge and forwards incoming HTTP requests to your local service.
