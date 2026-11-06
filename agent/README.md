@@ -84,6 +84,8 @@ Pigeon accepts an options object.
 | `discoveryTimeout` | Number | `10000` | Control-plane discovery timeout |
 | `silent` | Boolean | `false` | Disable logging |
 | `logger` | Function/Object | `console` | Custom logging implementation |
+| `ShowQr` | Boolean | `false` | Render the public tunnel URL as a QR code in the terminal |
+| `showQr` | Boolean | `false` | Lowercase alias for `ShowQr` |
 | `tokenOverride` | String | `null` | Token to use instead of the `.pegion` file |
 | `token` | String | `null` | Alias for `tokenOverride` |
 | `authToken` | String | `null` | Alias for `tokenOverride` |
