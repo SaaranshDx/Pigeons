@@ -1,4 +1,4 @@
-# Pigeon Agent
+# Pigeon Agentᵇᵉᵗᵃ
 
 > [!WARNING]
 > Security warning
