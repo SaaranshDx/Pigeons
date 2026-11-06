@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#111512">
 <meta name="description" content="Pigeon is a free HTTP tunneling service. Expose local HTTP services through a WebSocket reverse tunnel.">
-<title>Pigeon Free HTTP tunneling</title>
+<title>Pigeon</title>
 <style>
 :root {
   color-scheme: dark;
@@ -39,6 +39,12 @@ h1 {
   font-size: clamp(15px, 2vw, 17px); line-height: 1.8;
 }
 .tagline strong { color: var(--green); font-weight: 600; }
+.notice {
+  margin: 30px auto 0; padding: 16px 20px; border: 1px solid var(--line);
+  border-left: 3px solid var(--green); background: #18201b; color: var(--muted);
+  font-size: 14px; line-height: 1.6; text-align: left;
+}
+.notice strong { color: var(--text); font-weight: 650; }
 .links {
   display: flex; justify-content: center; flex-wrap: wrap; gap: 30px;
   margin: 40px auto 0; width: fit-content; max-width: 100%;
@@ -129,6 +135,9 @@ h1 {
     A <strong>free HTTP tunneling service</strong> that makes your local services accessible through a public URL.
     Connect with an outbound WebSocket tunnel. No inbound port forwarding required.
   </p>
+  <aside class="notice" aria-label="Tunnel connection notice">
+    <strong>Trying to connect to a tunnel?</strong> If you reached this page, the tunnel might not be connected or may be unreachable.
+  </aside>
   <nav class="links" aria-label="Project links">
     <a href="https://github.com/SaaranshDx/Pigeons#readme" target="_blank" rel="noopener noreferrer">
       <svg viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><path d="M12 .9a11.1 11.1 0 0 0-3.51 21.63c.56.1.76-.24.76-.54v-2.1c-3.1.68-3.76-1.31-3.76-1.31-.51-1.29-1.24-1.63-1.24-1.63-1.01-.69.08-.68.08-.68 1.12.08 1.71 1.15 1.71 1.15 1 1.71 2.62 1.22 3.26.93.1-.72.39-1.22.71-1.5-2.48-.28-5.09-1.24-5.09-5.52 0-1.22.44-2.22 1.15-3-.12-.28-.5-1.42.11-2.96 0 0 .94-.3 3.05 1.15a10.6 10.6 0 0 1 5.55 0c2.11-1.45 3.05-1.15 3.05-1.15.61 1.54.23 2.68.11 2.96.72.78 1.15 1.78 1.15 3.01 0 4.29-2.62 5.23-5.11 5.5.4.35.76 1.03.76 2.08v3.07c0 .3.2.65.77.54A11.1 11.1 0 0 0 12 .9Z"/></svg>
