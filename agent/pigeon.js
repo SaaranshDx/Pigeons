@@ -1,7 +1,14 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const WebSocket = require("ws");
-const qrcode = require("qrcode-terminal");
+
+let qrcode;
+
+try {
+    qrcode = require("qrcode-terminal");
+} catch {
+    qrcode = null;
+}
 
 const VERSION = "0.1.0";
 const TOKEN_PATTERN = /^ptk_[A-Za-z0-9]{16}$/;
@@ -25,6 +32,12 @@ const HOP_BY_HOP = new Set([
 ]);
 
 function renderTerminalQr(url) {
+    if (!qrcode) {
+        throw new Error(
+            "qrcode-terminal is not installed; run `npm install qrcode-terminal` to enable QR codes"
+        );
+    }
+
     let output;
 
     qrcode.generate(url, { small: true }, generated => {
