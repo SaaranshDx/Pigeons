@@ -1,2 +1,3 @@
 # Pigeons
-http tunnels via ws
+
+HTTP tunnels via WebSockets.

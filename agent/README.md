@@ -78,6 +78,39 @@ Pigeon accepts an options object.
 | `discoveryTimeout` | Number | `10000` | Control-plane discovery timeout |
 | `silent` | Boolean | `false` | Disable logging |
 | `logger` | Function/Object | `console` | Custom logging implementation |
+| `tokenOverride` | String | `null` | Token to use instead of the `.pegion` file |
+| `token` | String | `null` | Alias for `tokenOverride` |
+| `authToken` | String | `null` | Alias for `tokenOverride` |
+| `tokenFile` | String | `./.pegion` | Custom token file path |
+
+## Token persistence
+
+When an agent registers without a token, the server creates a random token in
+the format `ptk_xxxxxxxxxxxxxxxx` and associates it with the assigned tunnel
+ID. The agent prints the token and saves it in `.pegion` in the current agent
+root. The file contains only the token and is ignored by Git.
+
+On startup, the agent reads `.pegion` and uses the stored token to resume the
+same tunnel ID after reconnecting. The file can contain either the plain token
+or a JSON object with a `token` property.
+
+To provide a token without using or creating a `.pegion` file, pass an explicit
+override when creating the Pigeon instance:
+
+```js
+const tunnel = await Pigeon({
+    target: "http://localhost:3030",
+    tokenOverride: "ptk_0123456789abcdef"
+});
+```
+
+`tokenOverride`, `token`, `authToken`, and `PIGEON_TOKEN` take precedence over
+`.pegion`. Explicit overrides are not written back to the token file. A token
+received from the server is also available as `connection.token` and through
+the `tunnel.token` getter.
+
+A valid token resumes its exact tunnel ID. Invalid or unknown tokens are
+reported by the server as authentication errors.
 
 ### Using a port
 
@@ -135,7 +168,8 @@ console.log(connection.tunnelId);
 ```js
 {
     url: "https://<tunnel-id>.mizucode.qzz.io",
-    tunnelId: "<tunnel-id>"
+    tunnelId: "<tunnel-id>",
+    token: "ptk_xxxxxxxxxxxxxxxx"
 }
 ```
 
@@ -147,6 +181,7 @@ Pigeon exposes read-only getters:
 console.log(tunnel.connected);
 console.log(tunnel.url);
 console.log(tunnel.tunnelId);
+console.log(tunnel.token);
 ```
 
 | Property | Description |
@@ -154,6 +189,7 @@ console.log(tunnel.tunnelId);
 | `connected` | Whether the tunnel is registered and connected |
 | `url` | Generated public URL |
 | `tunnelId` | Assigned tunnel identifier |
+| `token` | Token assigned to the tunnel |
 
 These properties become `null` or `false` when disconnected.
 

@@ -3,6 +3,7 @@ const express = require("express");
 const http = require("node:http");
 const crypto = require("node:crypto");
 const { filterHeaders } = require("./utils/filterHeaders");
+const { createToken, isValidToken } = require("./utils/tokens");
 const { WebSocketServer, WebSocket } = require("ws");
 require("dotenv").config();
 
@@ -11,6 +12,7 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
 const tunnels = new Map();
+const tokens = new Map();
 const pendingRequests = new Map();
 
 const REQUEST_TIMEOUT_MS = 30_000;
@@ -54,8 +56,36 @@ function sendHttpResponse(res, responsePayload) {
     res.status(status).end(body);
 }
 
+function sendAgentMessage(ws, payload) {
+    if (ws.readyState !== WebSocket.OPEN) return false;
+
+    ws.send(JSON.stringify(payload));
+    return true;
+}
+
+function sendAuthenticationError(ws, code, message) {
+    sendAgentMessage(ws, {
+        version: 1,
+        type: "agent_authentication_error",
+        code,
+        error: code,
+        message
+    });
+}
+
+function createUniqueToken() {
+    let token;
+
+    do {
+        token = createToken();
+    } while (tokens.has(token));
+
+    return token;
+}
+
 wss.on("connection", (ws) => {
     let tunnelId = null;
+    let token = null;
 
     console.log("[pigeon] agent connected");
 
@@ -66,27 +96,138 @@ wss.on("connection", (ws) => {
             payload = JSON.parse(data.toString());
         } catch (error) {
             console.error("[pigeon] invalid JSON from agent", error);
+            sendAuthenticationError(
+                ws,
+                "invalid_message",
+                "Agent messages must contain valid JSON"
+            );
             return;
         }
 
-        if (payload.type === "agent_register") {
-            if (!tunnelId) {
-                tunnelId = `pigeon-tunnel-${crypto.randomUUID()}`;
+        if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+            sendAuthenticationError(
+                ws,
+                "invalid_message",
+                "Agent messages must be JSON objects"
+            );
+            return;
+        }
 
-                tunnels.set(tunnelId, {
-                    connection: ws,
-                    connectedAt: Date.now()
+        if (
+            payload.type === "agent_register" ||
+            payload.type === "agent_authenticate"
+        ) {
+            if (tunnelId) {
+                const repeatedToken = payload.token ?? payload.auth_token;
+
+                if (repeatedToken !== undefined && repeatedToken !== token) {
+                    sendAuthenticationError(
+                        ws,
+                        "already_authenticated",
+                        "This connection is already authenticated to another tunnel"
+                    );
+                    return;
+                }
+
+                sendAgentMessage(ws, {
+                    version: 1,
+                    type: "agent_registered",
+                    tunnel_id: tunnelId,
+                    token,
+                    authenticated: true,
+                    resumed: true
                 });
-
-                console.log(`[pigeon] registered tunnel ${tunnelId}`);
+                return;
             }
 
-            ws.send(JSON.stringify({
+            const suppliedToken = payload.token ?? payload.auth_token;
+            const hasSuppliedToken =
+                suppliedToken !== undefined && suppliedToken !== null;
+
+            if (payload.type === "agent_authenticate" && !hasSuppliedToken) {
+                sendAuthenticationError(
+                    ws,
+                    "missing_token",
+                    "agent_authenticate requires a token"
+                );
+                return;
+            }
+
+            if (hasSuppliedToken && !isValidToken(suppliedToken)) {
+                sendAuthenticationError(
+                    ws,
+                    "invalid_token",
+                    "Token must match the format ptk_xxxxxxxxxxxxxxxx"
+                );
+                return;
+            }
+
+            let resumed = false;
+
+            if (hasSuppliedToken) {
+                const assignedTunnelId = tokens.get(suppliedToken);
+
+                if (!assignedTunnelId) {
+                    sendAuthenticationError(
+                        ws,
+                        "unknown_token",
+                        "The supplied token is not assigned to a tunnel"
+                    );
+                    return;
+                }
+
+                const existingTunnel = tunnels.get(assignedTunnelId);
+
+                if (
+                    existingTunnel &&
+                    existingTunnel.connection !== ws &&
+                    existingTunnel.connection.readyState === WebSocket.OPEN
+                ) {
+                    sendAuthenticationError(
+                        ws,
+                        "token_in_use",
+                        "The supplied token is already being used by an active tunnel"
+                    );
+                    return;
+                }
+
+                tunnelId = assignedTunnelId;
+                token = suppliedToken;
+                resumed = true;
+            } else {
+                tunnelId = `pigeon-tunnel-${crypto.randomUUID()}`;
+                token = createUniqueToken();
+            }
+
+            tunnels.set(tunnelId, {
+                connection: ws,
+                connectedAt: Date.now(),
+                token
+            });
+            tokens.set(token, tunnelId);
+
+            console.log(
+                `[pigeon] authenticated tunnel ${tunnelId} with token ${token}`
+            );
+
+            sendAgentMessage(ws, {
                 version: 1,
                 type: "agent_registered",
-                tunnel_id: tunnelId
-            }));
+                tunnel_id: tunnelId,
+                token,
+                authenticated: true,
+                resumed
+            });
 
+            return;
+        }
+
+        if (!tunnelId) {
+            sendAuthenticationError(
+                ws,
+                "authentication_required",
+                "Authenticate with agent_register before sending tunnel messages"
+            );
             return;
         }
 
@@ -164,9 +305,14 @@ app.get("/getcpserver", (req, res) => {
 });
 
 app.get("/tunnels", (req, res) => {
-  const tunnelMap = JSON.stringify(Object.fromEntries(tunnels), null, 2);
-  res.set('Content-Type', 'application/json');
-  res.send(tunnelMap);
+    const tunnelList = Object.fromEntries(
+        [...tunnels].map(([tunnelId, tunnel]) => [tunnelId, {
+            connectedAt: tunnel.connectedAt,
+            authenticated: Boolean(tunnel.token)
+        }])
+    );
+
+    res.json(tunnelList);
 });
 
 app.all("/{*path}", (req, res) => {

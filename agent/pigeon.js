@@ -1,6 +1,9 @@
+const fs = require("node:fs");
+const path = require("node:path");
 const WebSocket = require("ws");
 
 const VERSION = "0.1.0";
+const TOKEN_PATTERN = /^ptk_[A-Za-z0-9]{16}$/;
 const cfgURL = "https://pigeon.mizucode.qzz.io/getcpserver";
 const DEFAULT_FALLBACK_WS_URL = "ws://185.207.8.46:25351";
 const DEFAULT_DOMAIN = "mizucode.qzz.io";
@@ -138,6 +141,69 @@ const Pigeon = async (options = {}) => {
     const target = options.target || (
         options.port ? `http://127.0.0.1:${options.port}` : null
     );
+    const tokenFile = options.tokenFile || path.join(process.cwd(), ".pegion");
+    const tokenOverride = options.tokenOverride ??
+        options.token ??
+        options.authToken ??
+        process.env.PIGEON_TOKEN;
+    const hasTokenOverride =
+        tokenOverride !== undefined && tokenOverride !== null;
+
+    function readStoredToken() {
+        if (hasTokenOverride) return null;
+
+        let contents;
+
+        try {
+            contents = fs.readFileSync(tokenFile, "utf8").trim();
+        } catch (error) {
+            if (error.code !== "ENOENT") {
+                log(`Could not read token file: ${error.message}`, "warn");
+            }
+            return null;
+        }
+
+        if (!contents) return null;
+
+        let token = contents;
+
+        if (contents.startsWith("{")) {
+            try {
+                token = JSON.parse(contents).token;
+            } catch {
+                log("Token file contains invalid JSON; starting without a token", "warn");
+                return null;
+            }
+        }
+
+        if (!TOKEN_PATTERN.test(token)) {
+            log("Token file contains an invalid token; starting without a token", "warn");
+            return null;
+        }
+
+        return token;
+    }
+
+    async function saveToken(token) {
+        try {
+            await fs.promises.writeFile(tokenFile, `${token}\n`, {
+                encoding: "utf8",
+                mode: 0o600
+            });
+        } catch (error) {
+            log(`Could not save token file: ${error.message}`, "warn");
+        }
+    }
+
+    const storedToken = readStoredToken();
+
+    if (hasTokenOverride) {
+        log(`Using token override: ${tokenOverride}`, "info");
+    } else if (storedToken) {
+        log(`Using saved token from ${tokenFile}: ${storedToken}`, "info");
+    } else {
+        log("No saved token found; requesting one from the server", "info");
+    }
 
     if (!Number.isFinite(requestTimeout) || requestTimeout <= 0) {
         throw new TypeError("requestTimeout must be a positive number");
@@ -152,8 +218,11 @@ const Pigeon = async (options = {}) => {
         edgeURL: null,
         socket: null,
         tunnelId: null,
+        token: hasTokenOverride ? tokenOverride : storedToken,
+        persistToken: !hasTokenOverride,
         url: null,
         connected: false,
+        authenticationFailed: false,
         reconnectAttempts: 0,
         reconnectTimer: null,
         connectPromise: null,
@@ -368,16 +437,21 @@ const Pigeon = async (options = {}) => {
 
         const detail = reason?.toString() || "no reason";
         log(`Disconnected (${code}: ${detail})`, "warn");
-        scheduleReconnect();
+
+        if (!state.authenticationFailed) {
+            scheduleReconnect();
+        }
     }
 
     async function connect() {
         state.shouldConnect = true;
+        state.authenticationFailed = false;
 
         if (state.connected && state.socket?.readyState === WebSocket.OPEN) {
             return {
                 url: state.url,
-                tunnelId: state.tunnelId
+                tunnelId: state.tunnelId,
+                token: state.token
             };
         }
 
@@ -424,18 +498,27 @@ const Pigeon = async (options = {}) => {
                         log("Connected successfully", "success");
 
                         try {
-                            socket.send(JSON.stringify({
+                            const registrationPayload = {
                                 version: 1,
                                 type: "agent_register",
                                 agent_version: VERSION,
                                 context: "initial_tunnel_registration"
-                            }));
+                            };
+
+                            if (state.token !== null) {
+                                registrationPayload.token = state.token;
+                                log(`Authenticating with token: ${state.token}`, "info");
+                            } else {
+                                log("Authenticating without a token", "info");
+                            }
+
+                            socket.send(JSON.stringify(registrationPayload));
                         } catch (error) {
                             rejectRegistration(error);
                         }
                     });
 
-                    socket.on("message", data => {
+                    socket.on("message", async data => {
                         if (state.socket !== socket || !state.shouldConnect) {
                             return;
                         }
@@ -463,18 +546,50 @@ const Pigeon = async (options = {}) => {
                                     return;
                                 }
 
+                                const token = payload.token;
+
+                                if (!token || !TOKEN_PATTERN.test(token)) {
+                                    const error = new Error(
+                                        "Registration response contains an invalid token"
+                                    );
+                                    log(error.message, "error");
+                                    rejectRegistration(error);
+                                    socket.close();
+                                    return;
+                                }
+
+                                if (state.persistToken) {
+                                    await saveToken(token);
+                                }
+
                                 state.tunnelId = tunnelId;
+                                state.token = token;
                                 state.url = `https://${tunnelId}.${domain}`;
                                 state.connected = true;
 
+                                log(`Received token from server: ${token}`, "success");
                                 log("Registration successful", "success");
                                 log(`ID: ${tunnelId}`, "success");
                                 log(`URL: ${state.url}`, "success");
 
                                 resolveRegistration({
                                     url: state.url,
-                                    tunnelId
+                                    tunnelId,
+                                    token
                                 });
+                                break;
+                            }
+
+                            case "agent_authentication_error": {
+                                const error = new Error(
+                                    payload.message ||
+                                    `Authentication failed: ${payload.code || "unknown_error"}`
+                                );
+                                error.code = payload.code || payload.error;
+                                state.authenticationFailed = true;
+                                log(error.message, "error");
+                                rejectRegistration(error);
+                                socket.close(1008, "Authentication failed");
                                 break;
                             }
 
@@ -516,7 +631,11 @@ const Pigeon = async (options = {}) => {
                 }
 
                 log(`Connection failed: ${error.message}`, "error");
-                scheduleReconnect();
+
+                if (!state.authenticationFailed) {
+                    scheduleReconnect();
+                }
+
                 throw error;
             }
         })();
@@ -538,6 +657,7 @@ const Pigeon = async (options = {}) => {
         state.connected = false;
         state.tunnelId = null;
         state.url = null;
+        state.authenticationFailed = false;
 
         if (!socket) return;
 
@@ -563,6 +683,10 @@ const Pigeon = async (options = {}) => {
 
         get tunnelId() {
             return state.tunnelId;
+        },
+
+        get token() {
+            return state.token;
         }
     };
 };
