@@ -205,15 +205,13 @@ The current gateway configures a 10 MB body limit. The request and response tran
 
 The agent retries unexpected connection failures with exponential backoff, starting at one second and capping at 30 seconds. Calling `disconnect()` cancels reconnection and closes the active socket.
 
-## Security notes
-
-A public tunnel makes the configured target reachable through the public hostname. Only expose services that are intended to be reachable.
-
-- Treat `ptk_` tokens as credentials. Anyone holding a token can attempt to resume its associated tunnel.
-- Do not commit `.pegion` or `tokens/tokens.json` to source control.
-- Protect administrative routes on the target application with application-level authentication.
-- Use a secure WebSocket edge (`wss://`) in production.
-- Pigeon provides transport and routing; it does not provide application-level authorization.
+> [!WARNING]
+> Public tunnels expose their configured target. Only expose services intended to be public.
+>
+> - Keep `ptk_` tokens and `.pegion` / `tokens/tokens.json` private.
+> - Protect sensitive routes in the target application.
+> - Use `wss://` in production.
+> - Pigeon handles transport, not application authorization.
 
 ## Project status
 
