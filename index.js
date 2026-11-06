@@ -18,6 +18,8 @@ const tokens = new Map();
 const pendingRequests = new Map();
 
 const REQUEST_TIMEOUT_MS = 30_000;
+const HEARTBEAT_INTERVAL_MS = 30_000;
+const CONNECTION_PROBE_TIMEOUT_MS = 2_000;
 const TOKEN_DIR = path.join(__dirname, "tokens");
 const TOKEN_FILE = path.join(TOKEN_DIR, "tokens.json");
 
@@ -87,6 +89,26 @@ function saveTokenMappings() {
 
 loadTokenMappings();
 
+const heartbeatInterval = setInterval(() => {
+    for (const ws of wss.clients) {
+        if (ws.isAlive === false || ws.readyState !== WebSocket.OPEN) {
+            ws.terminate();
+            continue;
+        }
+
+        ws.isAlive = false;
+
+        try {
+            ws.ping();
+        } catch (error) {
+            ws.terminate();
+        }
+    }
+}, HEARTBEAT_INTERVAL_MS);
+
+heartbeatInterval.unref();
+wss.on("close", () => clearInterval(heartbeatInterval));
+
 function sendHttpResponse(res, responsePayload) {
     const response = responsePayload?.response;
     const status = Number(response?.status);
@@ -133,6 +155,40 @@ function sendAgentMessage(ws, payload) {
     return true;
 }
 
+function probeConnection(ws) {
+    return new Promise((resolve) => {
+        if (ws.readyState !== WebSocket.OPEN) {
+            resolve(false);
+            return;
+        }
+
+        let settled = false;
+        const timer = setTimeout(() => finish(false), CONNECTION_PROBE_TIMEOUT_MS);
+
+        const finish = (alive) => {
+            if (settled) return;
+
+            settled = true;
+            clearTimeout(timer);
+            ws.off("pong", handlePong);
+            ws.off("close", handleClose);
+            resolve(alive);
+        };
+
+        const handlePong = () => finish(true);
+        const handleClose = () => finish(false);
+
+        ws.once("pong", handlePong);
+        ws.once("close", handleClose);
+
+        try {
+            ws.ping();
+        } catch (error) {
+            finish(false);
+        }
+    });
+}
+
 function sendAuthenticationError(ws, code, message) {
     sendAgentMessage(ws, {
         version: 1,
@@ -157,9 +213,14 @@ wss.on("connection", (ws) => {
     let tunnelId = null;
     let token = null;
 
+    ws.isAlive = true;
+    ws.on("pong", () => {
+        ws.isAlive = true;
+    });
+
     console.log("[pigeon] agent connected");
 
-    ws.on("message", (data) => {
+    ws.on("message", async (data) => {
         let payload;
 
         try {
@@ -253,12 +314,23 @@ wss.on("connection", (ws) => {
                     existingTunnel.connection !== ws &&
                     existingTunnel.connection.readyState === WebSocket.OPEN
                 ) {
-                    sendAuthenticationError(
-                        ws,
-                        "token_in_use",
-                        "The supplied token is already being used by an active tunnel"
+                    const existingConnectionIsAlive = await probeConnection(
+                        existingTunnel.connection
                     );
-                    return;
+
+                    if (existingConnectionIsAlive) {
+                        sendAuthenticationError(
+                            ws,
+                            "token_in_use",
+                            "The supplied token is already being used by an active tunnel"
+                        );
+                        return;
+                    }
+
+                    console.log(
+                        `[pigeon] replacing stale connection for tunnel ${assignedTunnelId}`
+                    );
+                    existingTunnel.connection.terminate();
                 }
 
                 tunnelId = assignedTunnelId;
@@ -338,21 +410,22 @@ wss.on("connection", (ws) => {
 
     ws.on("close", () => {
         const tunnel = tunnels.get(tunnelId);
+        const ownsTunnel = tunnel?.connection === ws;
 
-        if (tunnel?.connection === ws) {
+        if (ownsTunnel) {
             tunnels.delete(tunnelId);
-        }
 
-        for (const [id, pending] of pendingRequests) {
-            if (pending.tunnelId !== tunnelId) continue;
+            for (const [id, pending] of pendingRequests) {
+                if (pending.tunnelId !== tunnelId) continue;
 
-            clearTimeout(pending.timeout);
-            pendingRequests.delete(id);
+                clearTimeout(pending.timeout);
+                pendingRequests.delete(id);
 
-            if (!pending.res.headersSent) {
-                pending.res.status(502).json({
-                    error: "agent disconnected before returning a response"
-                });
+                if (!pending.res.headersSent) {
+                    pending.res.status(502).json({
+                        error: "agent disconnected before returning a response"
+                    });
+                }
             }
         }
 
