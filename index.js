@@ -393,8 +393,7 @@ app.all("/{*path}", (req, res) => {
     const tunnel = tunnels.get(tunnelId);
 
     if (!tunnel || tunnel.connection.readyState !== WebSocket.OPEN) {
-        //return res.status(404).send("Tunnel not found");
-        res.sendFile(path.join(__dirname, 'cta', 'index.html'));
+        return res.status(404).send("Tunnel not found");
     }
 
     const payload = {
