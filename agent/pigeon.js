@@ -1,6 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const WebSocket = require("ws");
+const qrcode = require("qrcode-terminal");
 
 const VERSION = "0.1.0";
 const TOKEN_PATTERN = /^ptk_[A-Za-z0-9]{16}$/;
@@ -22,6 +23,21 @@ const HOP_BY_HOP = new Set([
     "upgrade",
     "host"
 ]);
+
+function renderTerminalQr(url) {
+    let output;
+
+    qrcode.generate(url, { small: true }, generated => {
+        output = generated;
+    });
+
+    if (!output) {
+        throw new Error("QR code generation returned no output");
+    }
+
+    process.stdout.write(`\nScan this QR code to open the tunnel:\n${output}`);
+    process.stdout.write(`↗ ${url}\n\n`);
+}
 
 function createLogger(options) {
     return (message, type = "info") => {
@@ -134,6 +150,7 @@ const Pigeon = async (options = {}) => {
     }
 
     const log = createLogger(options);
+    const showQr = Boolean(options.ShowQr ?? options.showQr);
     const devMode = Boolean(options.devMode ?? options.dev);
     const requestTimeout = options.requestTimeout ?? DEFAULT_REQUEST_TIMEOUT;
     const discoveryTimeout = options.discoveryTimeout ?? DEFAULT_DISCOVERY_TIMEOUT;
@@ -223,6 +240,7 @@ const Pigeon = async (options = {}) => {
         url: null,
         connected: false,
         authenticationFailed: false,
+        qrDisplayed: false,
         reconnectAttempts: 0,
         reconnectTimer: null,
         connectPromise: null,
@@ -571,6 +589,15 @@ const Pigeon = async (options = {}) => {
                                 log("Registration successful", "success");
                                 log(`ID: ${tunnelId}`, "success");
                                 log(`URL: ${state.url}`, "success");
+
+                                if (showQr && !state.qrDisplayed) {
+                                    try {
+                                        renderTerminalQr(state.url);
+                                        state.qrDisplayed = true;
+                                    } catch (error) {
+                                        log(`Could not render QR code: ${error.message}`, "warn");
+                                    }
+                                }
 
                                 resolveRegistration({
                                     url: state.url,
