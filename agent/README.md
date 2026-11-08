@@ -2,9 +2,13 @@
 
 > [!WARNING]
 > Security warning
->
 > - Keep `ptk_` tokens and `.pegion` and add them to the gitignore
 > - Pigeon handles transport, not application authorization.
+
+> [!WARNING]
+> Compatiblity warning
+> - Pigeon is NOT compatible with live server or five server
+> - any of your requests from your tunneled application wont succeed unless they are accessable to the user's machine or the public internet(may vary in some cases)
 
 Expose a locally hosted HTTP service to the internet through Pigeon's tunneling infrastructure.
 
