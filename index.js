@@ -17,6 +17,7 @@ const tunnels = new Map();
 const tokens = new Map();
 const pendingRequests = new Map();
 
+const PROTOCOL_VERSION = 2;
 const REQUEST_TIMEOUT_MS = 30_000;
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const CONNECTION_PROBE_TIMEOUT_MS = 2_000;
@@ -191,7 +192,7 @@ function probeConnection(ws) {
 
 function sendAuthenticationError(ws, code, message) {
     sendAgentMessage(ws, {
-        version: 1,
+        version: PROTOCOL_VERSION,
         type: "agent_authentication_error",
         code,
         error: code,
@@ -212,6 +213,7 @@ function createUniqueToken() {
 wss.on("connection", (ws) => {
     let tunnelId = null;
     let token = null;
+    let warnedAboutLegacyProtocol = false;
 
     ws.isAlive = true;
     ws.on("pong", () => {
@@ -248,6 +250,13 @@ wss.on("connection", (ws) => {
             payload.type === "agent_register" ||
             payload.type === "agent_authenticate"
         ) {
+            if (payload.version === 1 && !warnedAboutLegacyProtocol) {
+                warnedAboutLegacyProtocol = true;
+                console.warn(
+                    "[pigeon] agent is using protocol version 1; please update it to version 2"
+                );
+            }
+
             if (tunnelId) {
                 const repeatedToken = payload.token ?? payload.auth_token;
 
@@ -261,7 +270,7 @@ wss.on("connection", (ws) => {
                 }
 
                 sendAgentMessage(ws, {
-                    version: 1,
+                    version: PROTOCOL_VERSION,
                     type: "agent_registered",
                     tunnel_id: tunnelId,
                     token,
@@ -354,7 +363,7 @@ wss.on("connection", (ws) => {
             );
 
             sendAgentMessage(ws, {
-                version: 1,
+                version: PROTOCOL_VERSION,
                 type: "agent_registered",
                 tunnel_id: tunnelId,
                 token,
@@ -470,7 +479,7 @@ app.all("/{*path}", (req, res) => {
     }
 
     const payload = {
-        version: 1,
+        version: PROTOCOL_VERSION,
         type: "http_request",
         id: crypto.randomUUID(),
 

@@ -11,6 +11,7 @@ try {
 }
 
 const VERSION = "0.1.0";
+const PROTOCOL_VERSION = 2;
 const TOKEN_PATTERN = /^ptk_[A-Za-z0-9]{16}$/;
 const cfgURL = "https://pigeonapi.mizucode.qzz.io/getcpserver";
 const DEFAULT_FALLBACK_WS_URL = "ws://185.207.8.46:25351";
@@ -425,7 +426,7 @@ const Pigeon = async (options = {}) => {
         }
 
         socket.send(JSON.stringify({
-            version: 1,
+            version: PROTOCOL_VERSION,
             type: "http_response",
             id,
             response
@@ -530,7 +531,7 @@ const Pigeon = async (options = {}) => {
 
                         try {
                             const registrationPayload = {
-                                version: 1,
+                                version: PROTOCOL_VERSION,
                                 type: "agent_register",
                                 agent_version: VERSION,
                                 context: "initial_tunnel_registration"
