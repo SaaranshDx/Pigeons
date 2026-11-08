@@ -12,7 +12,7 @@ try {
 
 const VERSION = "0.1.0";
 const TOKEN_PATTERN = /^ptk_[A-Za-z0-9]{16}$/;
-const cfgURL = "https://pigeon.mizucode.qzz.io/getcpserver";
+const cfgURL = "https://pigeonapi.mizucode.qzz.io/getcpserver";
 const DEFAULT_FALLBACK_WS_URL = "ws://185.207.8.46:25351";
 const DEFAULT_DOMAIN = "mizucode.qzz.io";
 const DEFAULT_REQUEST_TIMEOUT = 30_000;
